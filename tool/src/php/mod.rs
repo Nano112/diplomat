@@ -709,20 +709,26 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
             Type::Slice(hir::Slice::Str(..)) => {
                 let buf = format!("$__buf{index}");
                 let view = format!("$__view{index}");
+                // PHP's FFI::new rejects zero-size arrays, so the empty string skips
+                // the buffer entirely (null data + len 0 is a valid empty view).
                 let _ = writeln!(setup, "        $__n{index} = strlen({pname});");
-                let _ = writeln!(
-                    setup,
-                    "        {buf} = Lib::ffi()->new(\"uint8_t[\" . $__n{index} . \"]\", false);"
-                );
-                let _ = writeln!(
-                    setup,
-                    "        \\FFI::memcpy({buf}, {pname}, $__n{index});"
-                );
                 let _ = writeln!(setup, "        {view} = Lib::ffi()->new('DiplomatStringView');");
+                let _ = writeln!(setup, "        if ($__n{index} > 0) {{");
                 let _ = writeln!(
                     setup,
-                    "        {view}->data = $__n{index} > 0 ? Lib::ffi()->cast('const char*', \\FFI::addr({buf}[0])) : null;"
+                    "            {buf} = Lib::ffi()->new(\"uint8_t[\" . $__n{index} . \"]\", false);"
                 );
+                let _ = writeln!(
+                    setup,
+                    "            \\FFI::memcpy({buf}, {pname}, $__n{index});"
+                );
+                let _ = writeln!(
+                    setup,
+                    "            {view}->data = Lib::ffi()->cast('const char*', \\FFI::addr({buf}[0]));"
+                );
+                let _ = writeln!(setup, "        }} else {{");
+                let _ = writeln!(setup, "            {view}->data = null;");
+                let _ = writeln!(setup, "        }}");
                 let _ = writeln!(setup, "        {view}->len = $__n{index};");
                 view
             }
@@ -731,19 +737,20 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
                 let arr = format!("$__arr{index}");
                 let view = format!("$__view{index}");
                 let _ = writeln!(setup, "        $__n{index} = count({pname});");
-                let _ = writeln!(
-                    setup,
-                    "        {arr} = Lib::ffi()->new(\"{c_ty}[\" . $__n{index} . \"]\", false);"
-                );
-                let _ = writeln!(
-                    setup,
-                    "        foreach ({pname} as $__i{index} => $__v{index}) {{ {arr}[$__i{index}] = $__v{index}; }}"
-                );
                 let _ = writeln!(setup, "        {view} = Lib::ffi()->new('Diplomat{}View');", primitive_c_type_name_for_view(*prim));
+                let _ = writeln!(setup, "        if ($__n{index} > 0) {{");
                 let _ = writeln!(
                     setup,
-                    "        {view}->data = $__n{index} > 0 ? \\FFI::addr({arr}[0]) : null;"
+                    "            {arr} = Lib::ffi()->new(\"{c_ty}[\" . $__n{index} . \"]\", false);"
                 );
+                let _ = writeln!(
+                    setup,
+                    "            foreach ({pname} as $__i{index} => $__v{index}) {{ {arr}[$__i{index}] = $__v{index}; }}"
+                );
+                let _ = writeln!(setup, "            {view}->data = \\FFI::addr({arr}[0]);");
+                let _ = writeln!(setup, "        }} else {{");
+                let _ = writeln!(setup, "            {view}->data = null;");
+                let _ = writeln!(setup, "        }}");
                 let _ = writeln!(setup, "        {view}->len = $__n{index};");
                 view
             }
@@ -752,19 +759,20 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
                 let arr = format!("$__arr{index}");
                 let view = format!("$__view{index}");
                 let _ = writeln!(setup, "        $__n{index} = count({pname});");
-                let _ = writeln!(
-                    setup,
-                    "        {arr} = Lib::ffi()->new(\"{st_name}[\" . $__n{index} . \"]\", false);"
-                );
-                let _ = writeln!(
-                    setup,
-                    "        foreach ({pname} as $__i{index} => $__v{index}) {{ {arr}[$__i{index}] = $__v{index}->toFFI(); }}"
-                );
                 let _ = writeln!(setup, "        {view} = Lib::ffi()->new('Diplomat{st_name}View');");
+                let _ = writeln!(setup, "        if ($__n{index} > 0) {{");
                 let _ = writeln!(
                     setup,
-                    "        {view}->data = $__n{index} > 0 ? \\FFI::addr({arr}[0]) : null;"
+                    "            {arr} = Lib::ffi()->new(\"{st_name}[\" . $__n{index} . \"]\", false);"
                 );
+                let _ = writeln!(
+                    setup,
+                    "            foreach ({pname} as $__i{index} => $__v{index}) {{ {arr}[$__i{index}] = $__v{index}->toFFI(); }}"
+                );
+                let _ = writeln!(setup, "            {view}->data = \\FFI::addr({arr}[0]);");
+                let _ = writeln!(setup, "        }} else {{");
+                let _ = writeln!(setup, "            {view}->data = null;");
+                let _ = writeln!(setup, "        }}");
                 let _ = writeln!(setup, "        {view}->len = $__n{index};");
                 view
             }
