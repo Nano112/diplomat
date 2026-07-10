@@ -13,6 +13,7 @@ mod demo_gen;
 mod js;
 mod kotlin;
 mod nanobind;
+mod php;
 
 use colored::*;
 use config::toml_value_from_str;
@@ -37,6 +38,7 @@ pub fn get_supported(target_language: &str) -> hir::BackendAttrSupport {
         "demo_gen" => demo_gen::attr_support(),
         "kotlin" => kotlin::attr_support(),
         "py-nanobind" | "nanobind" => nanobind::attr_support(),
+        "php" => php::attr_support(),
         o => panic!("Unknown target: {}", o),
     }
 }
@@ -116,6 +118,7 @@ pub fn gen(
         "dart" => dart::run(&tcx, docs_url_gen),
         "js" => js::run(&tcx, config, docs_url_gen),
         "py-nanobind" | "nanobind" => nanobind::run(&tcx, config, docs_url_gen),
+        "php" => php::run(&tcx, config, docs_url_gen),
         "demo_gen" => {
             // If we don't already have an import path set up, generate our own imports:
             if !(config.demo_gen_config.module_name.is_some()
