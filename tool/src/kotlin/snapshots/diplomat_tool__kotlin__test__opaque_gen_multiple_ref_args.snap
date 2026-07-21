@@ -49,7 +49,7 @@ class AnotherOpaque internal constructor (
         val returnVal = lib.AnotherOpaque_get_rust_owned_bytes(handle, aSliceMemory.slice, bSliceMemory.slice);
         try {
             val selfEdges: List<Any> = listOf()
-            val handle = returnVal 
+            val handle = returnVal
             val returnOpaque = RustOwnedBytes(handle, selfEdges, true)
             return returnOpaque
         } finally {
