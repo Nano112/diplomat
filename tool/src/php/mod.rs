@@ -514,14 +514,16 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
         let _ = writeln!(out, "    /** @internal */");
         let _ = writeln!(out, "    public \\FFI\\CData $ptr;");
         let _ = writeln!(out, "    private bool $owned;");
+        let _ = writeln!(out, "    private ?object $borrowedFrom;");
         let _ = writeln!(out);
         let _ = writeln!(out, "    /** @internal */");
         let _ = writeln!(
             out,
-            "    public function __construct(\\FFI\\CData $ptr, bool $owned) {{"
+            "    public function __construct(\\FFI\\CData $ptr, bool $owned, ?object $borrowedFrom = null) {{"
         );
         let _ = writeln!(out, "        $this->ptr = $ptr;");
         let _ = writeln!(out, "        $this->owned = $owned;");
+        let _ = writeln!(out, "        $this->borrowedFrom = $borrowedFrom;");
         let _ = writeln!(out, "    }}");
         let _ = writeln!(out);
 
@@ -607,7 +609,12 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
                     method.abi_name.as_str(),
                     call_args.join(", ")
                 );
-                let _ = writeln!(out, "        return {};", self.from_ffi_call_result(ty, "$ret"));
+                let borrowed_from = (!is_static).then_some("$this");
+                let _ = writeln!(
+                    out,
+                    "        return {};",
+                    self.from_ffi_call_result(ty, "$ret", borrowed_from)
+                );
             }
             ReturnType::Fallible(ref ok, ref err) => {
                 let uses_write = matches!(ok, SuccessType::Write);
@@ -653,10 +660,11 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
                         let _ = writeln!(out, "        return Lib::readAndFreeWrite($write);");
                     }
                     SuccessType::OutType(ref ty) => {
+                        let borrowed_from = (!is_static).then_some("$this");
                         let _ = writeln!(
                             out,
                             "        return {};",
-                            self.from_ffi_call_result(ty, "$result->ok")
+                            self.from_ffi_call_result(ty, "$result->ok", borrowed_from)
                         );
                     }
                     _ => unreachable!("unknown AST/HIR variant"),
@@ -781,7 +789,12 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
     }
 
     /// PHP expression converting an FFI return value into the PHP-side value.
-    fn from_ffi_call_result(&self, ty: &hir::OutType, expr: &str) -> String {
+    fn from_ffi_call_result(
+        &self,
+        ty: &hir::OutType,
+        expr: &str,
+        borrowed_from: Option<&str>,
+    ) -> String {
         match ty {
             Type::Primitive(_) => expr.to_string(),
             Type::Enum(_) => expr.to_string(),
@@ -796,8 +809,13 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
                     .name()
                     .as_str()
                     .to_string();
-                let owned = op.owner.is_owned();
-                format!("new {op_name}({expr}, {owned})")
+                if op.owner.is_owned() {
+                    format!("new {op_name}({expr}, true)")
+                } else if let Some(parent) = borrowed_from {
+                    format!("new {op_name}({expr}, false, {parent})")
+                } else {
+                    format!("new {op_name}({expr}, false)")
+                }
             }
             _ => expr.to_string(),
         }
@@ -947,8 +965,9 @@ mod tests {
 
         assert!(generated.contains("return new Fluent($ret, true);"));
         assert!(
-            generated.contains("return new Fluent($ret, false);"),
-            "borrowed return must not own and destroy its parent's pointer:\n{generated}"
+            generated.contains("return new Fluent($ret, false, $this);"),
+            "borrowed return must retain its parent without owning the pointer:\n{generated}"
         );
+        assert!(generated.contains("private ?object $borrowedFrom;"));
     }
 }
