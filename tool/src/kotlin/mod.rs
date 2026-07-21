@@ -953,17 +953,12 @@ val intermediateOption = {val_name}.option() ?: return null
                     ok_path: &'d str,
                     err_path: &'d str,
                 }
-                let rendered = ResultReturn {
+                ResultReturn {
                     ok_path: ok_path.as_str(),
                     err_path: err_path.as_str(),
                 }
                 .render()
-                .expect("Failed to render result return");
-                rendered
-                    .lines()
-                    .map(str::trim_end)
-                    .collect::<Vec<_>>()
-                    .join("\n")
+                .expect("Failed to render result return")
             }
             ReturnType::Nullable(SuccessType::OutType(ref res)) => {
                 self.gen_nullable_return_conversion(method, method_lifetimes_map, "returnVal", res)

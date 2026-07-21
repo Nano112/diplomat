@@ -3,6 +3,6 @@ listOf()
 {%- else %}
 {%- for self_edge in self_edges %}{%- if !loop.first %} + {% endif -%}{{self_edge}}{%- endfor %}
 {%- endif %}
-val handle = {{val_name}}{% if optional %} ?: return null{% endif %}
+val handle = {{val_name}} {% if optional %}?: return null{% endif %}
 val returnOpaque = {{return_type_name}}(handle, selfEdges{%- if !named_lifetimes.is_empty() %}{%- for lt in named_lifetimes %}, {{lt}}Edges{%- endfor %}{% endif -%}, {{is_owned}})
 return returnOpaque{{return_type_modifier}}
