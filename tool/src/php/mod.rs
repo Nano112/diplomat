@@ -796,7 +796,8 @@ impl<'cx, 'tcx> Ctx<'cx, 'tcx> {
                     .name()
                     .as_str()
                     .to_string();
-                format!("new {op_name}({expr}, true)")
+                let owned = op.owner.is_owned();
+                format!("new {op_name}({expr}, {owned})")
             }
             _ => expr.to_string(),
         }
@@ -907,4 +908,47 @@ fn to_camel_case(name: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use diplomat_core::hir;
+    use quote::quote;
+
+    #[test]
+    fn borrowed_opaque_returns_are_not_owned() {
+        let tokens = quote! {
+            #[diplomat::bridge]
+            mod ffi {
+                #[diplomat::opaque_mut]
+                pub struct Fluent;
+
+                impl Fluent {
+                    pub fn create() -> Box<Fluent> { Box::new(Fluent) }
+                    pub fn chain<'a>(&'a mut self) -> &'a mut Fluent { self }
+                }
+            }
+        };
+        let item = syn::parse2::<syn::File>(tokens).expect("parse bridge");
+        let mut validator = hir::BasicAttributeValidator::new("php");
+        validator.support = super::attr_support();
+        let tcx = hir::TypeContext::from_syn(&item, Default::default(), validator)
+            .expect("lower bridge");
+        let mut config = crate::Config::default();
+        config.shared_config.lib_name = Some("fluent".into());
+        let docs = Default::default();
+        let (files, errors) = super::run(&tcx, config, &docs);
+        assert!(errors.errors.take().is_empty());
+        let generated = files
+            .take_files()
+            .into_iter()
+            .find_map(|(name, content)| (name == "Fluent.php").then_some(content))
+            .expect("Fluent.php");
+
+        assert!(generated.contains("return new Fluent($ret, true);"));
+        assert!(
+            generated.contains("return new Fluent($ret, false);"),
+            "borrowed return must not own and destroy its parent's pointer:\n{generated}"
+        );
+    }
 }
