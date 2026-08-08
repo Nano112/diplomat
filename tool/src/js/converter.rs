@@ -402,13 +402,20 @@ impl<'tcx> ItemGenContext<'_, 'tcx> {
                     }
                     _ => (),
                 }
-                Some(
-                    format!(
+                Some(match o {
+                    // `result` here is the raw wasm i32 return value (not something that's
+                    // already been through `gen_c_to_js_deref_for_type`), so it needs the same
+                    // `=== 1` coercion to a real JS boolean that the deref path already applies.
+                    // Do NOT push this into `gen_c_to_js_for_type` itself: every other caller of
+                    // that function passes a value that has already been deref'd/coerced, and
+                    // coercing again there would silently invert already-correct booleans.
+                    Type::Primitive(PrimitiveType::Bool) => format!("return {result} === 1;").into(),
+                    _ => format!(
                         "return {};",
                         self.gen_c_to_js_for_type(o, result.into(), &method.lifetime_env)
                     )
                     .into(),
-                )
+                })
             }
 
             // Result<(), ()> or Option<()>
